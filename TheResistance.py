@@ -1,3 +1,4 @@
+import sys
 from minizinc import Instance, Model, Solver
 import numpy as np
 import json
@@ -15,11 +16,15 @@ MORSE_CODE_DICT = {'A': [1, 2], 'B': [2, 1, 1, 1],
                    'X': [2, 1, 1, 2], 'Y': [2, 1, 2, 2], 'Z': [2, 2, 1, 1]}
 
 
-# Getting vars from txt file
+# Getting vars from JSON file
 def getVarsFromJSON(filename):
-    f = open(filename)
-    data = json.loads(f.read())
-    return data
+    try:
+      f = open(filename)
+      data = json.loads(f.read())
+      return data
+    except IOError:
+      print("Error: File does not appear to exist.")
+      raise
 
 
 # Input morse converter to number
@@ -27,7 +32,7 @@ def morse_converter(m):
     return [1 if i=='.' else 2 for i in m]
 
 
-# Input vocabulary converter to number
+# Input words converter to number
 def word_converter(word):
     var=[]
     if len(word)>=20 and len(word)<=0:
@@ -56,36 +61,37 @@ def vocabulary_matrix(v,l):
 
 
 # Solution cycle
-def result_printer(result):
+def result_printer(result,v):
     for sol in result.solution:
-        print(sol.frase)
-    if len(result.solution)>=0 and len(result.solution)<2^63:
-        print(len(result.solution))
+        print("One correct sentence is composed by: ",[v[k] for k in [i-1 for i in sol.words if i!=max(sol.words)]])
+    if len(result.solution)>=0 and len(result.solution)<2**63:
+        print("The number of correct combinations is: ",len(result.solution))
     else:
         print("Number of solutions is too high.")
 
 
-# Create a MiniZinc model
-gecode = Solver.lookup("gecode")
+def main(argv):
+    # Create a MiniZinc model
+    gecode = Solver.lookup("gecode")
 
-model=Model()
-model.add_file("TheResistance.mzn")
+    model=Model()
+    model.add_file("TheResistance.mzn")
 
+    # Transform Model into a instance
+    inst = Instance(gecode, model)
 
-# Transform Model into a instance
-inst = Instance(gecode, model)
+    # Instantiate variables from file
+    data = getVarsFromJSON('data/'+argv)
 
+    inst["n"] = data["n"]+1
+    inst["morse"] = morse_converter(data["morse"])
+    inst["len"] = len_calculator(data["vocabulary"])
+    inst["voc"] = vocabulary_matrix(data["vocabulary"],len_calculator(data["vocabulary"]))
+    inst["lmax"]= len(morse_converter(data["morse"]))
 
-# Instantiate variables from file
-data = getVarsFromJSON("data.json")
+    # Output
+    result = inst.solve(all_solutions=True)
+    result_printer(result,data["vocabulary"])
 
-inst["n"] = data["n"]+1
-inst["morse"] = morse_converter(data["morse"])
-inst["len"] = len_calculator(data["vocabulary"])
-inst["c"] = vocabulary_matrix(data["vocabulary"],len_calculator(data["vocabulary"]))
-inst["lmax"]= len(morse_converter(data["morse"]))
-
-
-# Output
-result = inst.solve(all_solutions=True)
-result_printer(result)
+if __name__ == "__main__":
+    main(sys.argv[1])

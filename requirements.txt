@@ -1,0 +1,2 @@
+minizinc==0.5.0
+numpy==1.20.3
